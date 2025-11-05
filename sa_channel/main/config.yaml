@@ -1,0 +1,9 @@
+# config.yaml (Beispiel)
+mysql:
+  host: localhost
+  user: sa_channel
+  password: secret
+  database: spamassassin_channel
+  charset: utf8mb4
+
+templates_dir: templates
