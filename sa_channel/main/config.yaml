@@ -4,6 +4,12 @@ mysql:
   user: sa_channel
   password: secret
   database: spamassassin_channel
+  port: 3306
   charset: utf8mb4
 
-templates_dir: templates
+output_dir: /var/lib/sa-channel/build
+template_dir: templates
+spamassassin_bin: /usr/bin/spamassassin
+gpg_key: channel@dein-domain.de
+web_root: /var/www/sa-channel
+dns_zone_file: /etc/bind/db.dein-channel.de  # optional
