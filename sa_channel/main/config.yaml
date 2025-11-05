@@ -7,9 +7,15 @@ mysql:
   port: 3306
   charset: utf8mb4
 
-output_dir: /var/lib/sa-channel/build
-template_dir: templates
-spamassassin_bin: /usr/bin/spamassassin
-gpg_key: channel@dein-domain.de
-web_root: /var/www/sa-channel
+domain: dein-channel.de
 dns_zone_file: /etc/bind/db.dein-channel.de  # optional
+gpg_key: channel@dein-domain.de
+output_dir: /var/lib/sa-channel/build
+spamassassin_bin: /usr/bin/spamassassin
+template_dir: templates
+web_root: /var/www/sa-channel
+
+# Bash-spezifisch
+test_hosts:
+  - test1.dein-domain.de
+  - test2.dein-domain.de
