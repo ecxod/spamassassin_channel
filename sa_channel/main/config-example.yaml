@@ -8,6 +8,12 @@ mysql:
   port: 3306
   charset: utf8mb4
 
+gpg:
+  key_id: "0x1234567890ABCDEF"
+  email: "channel@dein-domain.de"
+  passphrase_env: "GPG_PASSPHRASE"  # export GPG_PASSPHRASE=...
+  key_dir: "main/gpg"
+
 domain: dein-channel.de
 dns_zone_file: /etc/bind/db.dein-channel.de  # optional
 gpg_key: channel@dein-domain.de
