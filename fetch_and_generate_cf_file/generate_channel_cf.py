@@ -4,7 +4,7 @@
 """
 generate_channel_cf.py
 ----------------------
-Lieste Regeln aus MySQL (Tabellen: channels, channel_rules, rules),
+Liest Regeln aus MySQL (Tabellen: channels, channel_rules, rules),
 generiert pro Channel eine .cf-Datei im SpamAssassin-Format,
 validiert Syntax mit `spamassassin -D` und gibt Metadaten aus.
 
