@@ -14,9 +14,10 @@
 # Autor: {{ r.author }}
 # SA-Version: {{ r.sa_version }}
 # Score: {{ "%.4f"|format(r.score) }}
+# Hash: {{ r.rule_hash }}
 # Test-Status: {{ r.test_status }}
-# Beschreibung:
 {% if r.description %}
+# Beschreibung:
 #   {{ r.description.replace("\n", "\n#   ") }}
 {% endif %}
 # -------------------------------------------------------------------
@@ -25,3 +26,5 @@
 score {{ r.rule_name }} {{ "%.4f"|format(r.score) }}
 
 {% endfor %}
+
+# EOF
