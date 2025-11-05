@@ -4,12 +4,12 @@
 """
 generate_channel_cf.py
 ----------------------
-Liest Regeln aus MySQL (Tabellen: channels, channel_rules, rules),
+Lieste Regeln aus MySQL (Tabellen: channels, channel_rules, rules),
 generiert pro Channel eine .cf-Datei im SpamAssassin-Format,
 validiert Syntax mit `spamassassin -D` und gibt Metadaten aus.
 
 Voraussetzungen:
-    pip install mysql-connector-python jinja2
+    pip install mysql-connector-python jinja2 pyyaml
 """
 
 import argparse
@@ -23,26 +23,8 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 import mysql.connector
+import yaml
 from jinja2 import Environment, FileSystemLoader
-
-# --------------------------------------------------------------------------- #
-# Konfiguration
-# --------------------------------------------------------------------------- #
-DEFAULT_CONFIG = {
-    "mysql": {
-        "host": "localhost",
-        "user": "sa_channel",
-        "password": "secret",
-        "database": "spamassassin_channel",
-        "port": 3306,
-    },
-    "output_dir": "/var/lib/sa-channel/build",
-    "template_dir": "templates",
-    "spamassassin_bin": "/usr/bin/spamassassin",
-    "gpg_key": "channel@dein-domain.de",
-    "web_root": "/var/www/sa-channel",
-    "dns_zone_file": "/etc/bind/db.dein-channel.de",  # optional
-}
 
 # --------------------------------------------------------------------------- #
 # Logging
@@ -55,13 +37,38 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
-# Jinja2 Setup
+# Konfiguration laden (YAML)
 # --------------------------------------------------------------------------- #
-jinja_env = Environment(
-    loader=FileSystemLoader(DEFAULT_CONFIG["template_dir"]),
-    trim_blocks=True,
-    lstrip_blocks=True,
-)
+def load_config(config_path: Path) -> Dict[str, Any]:
+    """Lade YAML-Konfiguration und führe Basis-Validierung durch."""
+    if not config_path.exists():
+        log.error("Konfigurationsdatei nicht gefunden: %s", config_path)
+        sys.exit(1)
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        log.info("Konfiguration geladen: %s", config_path)
+        return config
+    except Exception as e:
+        log.error("Fehler beim Parsen der config.yaml: %s", e)
+        sys.exit(1)
+
+
+# --------------------------------------------------------------------------- #
+# Jinja2 Setup (dynamisch aus Config)
+# --------------------------------------------------------------------------- #
+def setup_jinja(config: Dict[str, Any]) -> Environment:
+    template_dir = Path(config["template_dir"])
+    if not template_dir.exists():
+        log.error("Template-Verzeichnis nicht gefunden: %s", template_dir)
+        sys.exit(1)
+    return Environment(
+        loader=FileSystemLoader(template_dir),
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+
 
 # --------------------------------------------------------------------------- #
 # Datenbank-Abfragen
@@ -87,13 +94,11 @@ ORDER BY r.rule_name;
 # Hilfsfunktionen
 # --------------------------------------------------------------------------- #
 def compute_hash(content: str) -> str:
-    """SHA-256 Hash des Regel-Inhalts (wie in DB gespeichert)."""
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
-def validate_cf_file(cf_path: Path) -> bool:
-    """Führe `spamassassin -D <file>` aus und prüfe auf Syntax-Fehler."""
-    cmd = [DEFAULT_CONFIG["spamassassin_bin"], "-D", "--lint", f"--cf={cf_path}"]
+def validate_cf_file(cf_path: Path, sa_bin: str) -> bool:
+    cmd = [sa_bin, "-D", "--lint", f"--cf={cf_path}"]
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, check=False, timeout=30
@@ -108,8 +113,7 @@ def validate_cf_file(cf_path: Path) -> bool:
         return False
 
 
-def write_cf_file(channel: Dict[str, Any], rules: List[Dict[str, Any]], out_dir: Path):
-    """Erzeuge .cf-Datei mit Jinja2-Template."""
+def write_cf_file(channel: Dict[str, Any], rules: List[Dict[str, Any]], out_dir: Path, jinja_env: Environment) -> Path:
     template = jinja_env.get_template("channel.cf.j2")
     cf_content = template.render(
         channel=channel,
@@ -121,8 +125,7 @@ def write_cf_file(channel: Dict[str, Any], rules: List[Dict[str, Any]], out_dir:
     cf_path.write_text(cf_content, encoding="utf-8")
     log.info("CF-Datei geschrieben: %s", cf_path)
 
-    # Hash prüfen (wie in DB)
-    computed = compute_hash(cf_content)
+    # Hash-Validierung
     for r in rules:
         if r["rule_hash"] != compute_hash(r["rule"]):
             log.warning("Hash-Mismatch für Regel %s", r["rule_name"])
@@ -133,26 +136,31 @@ def write_cf_file(channel: Dict[str, Any], rules: List[Dict[str, Any]], out_dir:
 # --------------------------------------------------------------------------- #
 # Hauptlogik
 # --------------------------------------------------------------------------- #
-def main(channel_id: int | None):
-    # 1. MySQL Verbindung
+def main(channel_id: int | None, config: Dict[str, Any]):
+    # Jinja Setup
+    jinja_env = setup_jinja(config)
+
+    # Output-Verzeichnis
+    out_dir = Path(config["output_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # MySQL Verbindung
+    mysql_cfg = config["mysql"]
     try:
-        conn = mysql.connector.connect(**DEFAULT_CONFIG["mysql"])
+        conn = mysql.connector.connect(**mysql_cfg)
         cursor = conn.cursor(dictionary=True)
     except mysql.connector.Error as err:
         log.error("MySQL-Verbindung fehlgeschlagen: %s", err)
         sys.exit(1)
 
-    # 2. Channel(s) auswählen
+    # Channels laden
     cursor.execute(SQL_CHANNELS, (channel_id, channel_id))
     channels = cursor.fetchall()
     if not channels:
         log.error("Kein Channel mit ID %s gefunden.", channel_id)
         sys.exit(1)
 
-    out_dir = Path(DEFAULT_CONFIG["output_dir"])
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # 3. Für jeden Channel .cf generieren
+    # Verarbeitung
     for ch in channels:
         log.info("Bearbeite Channel: %s (ID=%s)", ch["name"], ch["id"])
 
@@ -163,21 +171,21 @@ def main(channel_id: int | None):
             log.warning("Channel %s hat keine aktiven Regeln.", ch["name"])
             continue
 
-        cf_file = write_cf_file(ch, rules, out_dir)
+        cf_file = write_cf_file(ch, rules, out_dir, jinja_env)
 
-        # 4. Syntax-Check
-        if not validate_cf_file(cf_file):
+        if not validate_cf_file(cf_file, config["spamassassin_bin"]):
             log.error("Abbruch für Channel %s wegen Lint-Fehlern.", ch["name"])
             continue
 
-        # 5. Optional: tar.bz2 + GPG Signatur (Vorschau)
+        # Archiv + Signatur
         tar_path = out_dir / f"{ch['name']}.tar.bz2"
         subprocess.run(
             ["tar", "-cjf", str(tar_path), "-C", str(out_dir), cf_file.name],
             check=True,
         )
+        sig_path = f"{tar_path}.asc"
         subprocess.run(
-            ["gpg", "--armor", "--sign", "--default-key", DEFAULT_CONFIG["gpg_key"], "-o", f"{tar_path}.asc", str(tar_path)],
+            ["gpg", "--armor", "--sign", "--default-key", config["gpg_key"], "-o", sig_path, str(tar_path)],
             check=True,
         )
         log.info("Archiv + Signatur: %s + .asc", tar_path.name)
@@ -202,10 +210,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config",
         type=Path,
-        default="config.yaml",
-        help="Pfad zur YAML-Konfigurationsdatei (optional)",
+        default=Path("config.yaml"),
+        help="Pfad zur YAML-Konfigurationsdatei",
     )
     args = parser.parse_args()
 
-    # TODO: YAML-Config laden und DEFAULT_CONFIG überschreiben
-    main(args.channel_id)
+    config = load_config(args.config)
+    main(args.channel_id, config)
