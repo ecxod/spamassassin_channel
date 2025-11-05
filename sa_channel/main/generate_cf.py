@@ -16,6 +16,7 @@ import os
 import sys
 from pathlib import Path
 from typing import List, Dict
+from datetime import datetime
 
 import mysql.connector
 import yaml
@@ -147,7 +148,7 @@ for chan in channels:
     context = {
         "channel": chan,
         "rules": rules,
-        "generated_at": cnx.get_server_info(),  # optional: UTC-Timestamp
+        "generated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%SZ"),  # Besser als Server-Info
     }
 
     # Template rendern
