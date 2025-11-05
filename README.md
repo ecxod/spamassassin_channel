@@ -63,6 +63,11 @@ CREATE TABLE `channel_rules` (
 ) ENGINE=InnoDB;
 ```
 
+### Nicht vergessen Public Key auf Webserver legen
+```
+# {{ channel.cf.j2 }}
+channel_key channel@dein-domain.de https://dein-domain.de/channel_pubkey.asc
+```
 
 ### Projekt tree
 ```
@@ -77,8 +82,14 @@ CREATE TABLE `channel_rules` (
         ├── config.yaml
         ├── generate_cf.py
         ├── generate_channel_cf.py
+        ├── gpg
+        │   ├── channel@dein-domain.de.pub  # ← Public Key
+        │   ├── channel@dein-domain.de.sec  # ← Secret Key (include in .gitigmore)
+        │   ├── channel_pubkey.asc          # ← Public Key (ascii)
+        │   └── README.md
         ├── logs
         └── templates
             └── channel.cf.j2
+.gitignore
 ```
 
