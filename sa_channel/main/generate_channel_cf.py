@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 import mysql.connector
+from jinja2 import Environment, FileSystemLoader, Template
 import yaml
-from jinja2 import Environment, FileSystemLoader
 
 # --------------------------------------------------------------------------- #
 # Logging
